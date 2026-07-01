@@ -97,6 +97,8 @@ export const gms2Schema = z
         packageType: z.enum(["zip", "appimage"]),
       })
       .partial(),
+    android: z.object({}).partial(),
+    ios: z.object({}).partial(),
   })
   .partial();
 

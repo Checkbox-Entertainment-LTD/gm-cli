@@ -61,6 +61,8 @@ export async function useGms2(
     windows: options.toolchainOptions.windows ?? defaults.windows,
     mac: options.toolchainOptions.mac ?? defaults.mac,
     linux: options.toolchainOptions.linux ?? defaults.linux,
+    android: options.toolchainOptions.android ?? defaults.android,
+    ios: options.toolchainOptions.ios ?? defaults.ios,
   };
 
   if (
@@ -97,7 +99,14 @@ export async function useGms2(
     `build-gms2-${options.target}-${runtime}`,
   );
 
-  const userDir = await createLocalSettings(ctx, cache, toolchainOptions);
+  const userDir = await createLocalSettings(
+    ctx,
+    cache,
+    toolchainOptions,
+    options.target,
+    options.licenseFile,
+    options.projectPath,
+  );
 
   let label: string;
   let igorAction: string;
@@ -245,6 +254,18 @@ function getPackageAction(
         extraArgs: [],
       };
     }
+    case "android":
+      return {
+        action: "Package",
+        targetFile: outputPath ?? `${defaultBasePath}.aab`,
+        extraArgs: [],
+      };
+    case "ios":
+      return {
+        action: "Package",
+        targetFile: outputPath ?? `${defaultBasePath}.zip`,
+        extraArgs: [],
+      };
     default:
       throw new KnownError("Target not supported in GM-CLI yet.");
   }
@@ -254,6 +275,9 @@ async function createLocalSettings(
   ctx: Context,
   cache: Cache,
   toolchainOptions: Gms2ToolchainOptions,
+  target: Target,
+  licenseFile: string,
+  projectPath: ProjectPath,
 ): Promise<string | undefined> {
   const localSettings: Record<string, string> = {};
   if (toolchainOptions.operagx.emscriptenSdk) {
@@ -264,9 +288,25 @@ async function createLocalSettings(
     localSettings["machine.Platform Settings.Windows.visual_studio_path"] =
       toolchainOptions.windows.visualStudioSdk;
   }
-  // add more options here...
 
-  if (Object.keys(localSettings).length === 0) {
+  const needsUserDir = ["android", "ios"].includes(target);
+
+  if (needsUserDir) {
+    const projectDir = ctx.path.dirname(projectPath);
+    const projectLocalSettings = ctx.path.join(
+      projectDir,
+      "local_settings.json",
+    );
+    try {
+      const content = await ctx.fs.readFile(projectLocalSettings, "utf-8");
+      const parsed = JSON.parse(content) as Record<string, string>;
+      Object.assign(localSettings, parsed);
+    } catch {
+      // No project-level local_settings.json found
+    }
+  }
+
+  if (Object.keys(localSettings).length === 0 && !needsUserDir) {
     return undefined;
   }
 
@@ -275,6 +315,17 @@ async function createLocalSettings(
     ctx.path.join(userDir, "local_settings.json"),
     JSON.stringify(localSettings, null, 2) + "\n",
   );
+
+  if (needsUserDir) {
+    const licenseDest = ctx.path.join(
+      userDir,
+      ctx.path.basename(ctx.path.dirname(licenseFile)),
+      "licence.plist",
+    );
+    await ctx.fs.mkdir(ctx.path.dirname(licenseDest), { recursive: true });
+    await ctx.fs.copyFile(licenseFile, licenseDest);
+  }
+
   return userDir;
 }
 

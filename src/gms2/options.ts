@@ -29,6 +29,8 @@ export interface Gms2ToolchainOptions {
   linux: {
     packageType?: "zip" | "appimage";
   };
+  android: Record<string, never>;
+  ios: Record<string, never>;
 }
 
 export function defaultGms2ToolchainOptions(): Gms2ToolchainOptions {
@@ -45,5 +47,7 @@ export function defaultGms2ToolchainOptions(): Gms2ToolchainOptions {
     linux: {
       packageType: "zip",
     },
+    android: {},
+    ios: {},
   };
 }
