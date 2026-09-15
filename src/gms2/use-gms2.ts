@@ -61,8 +61,8 @@ export async function useGms2(
     windows: options.toolchainOptions.windows ?? defaults.windows,
     mac: options.toolchainOptions.mac ?? defaults.mac,
     linux: options.toolchainOptions.linux ?? defaults.linux,
-    android: options.toolchainOptions.android ?? defaults.android,
     ios: options.toolchainOptions.ios ?? defaults.ios,
+    android: options.toolchainOptions.android ?? defaults.android,
   };
 
   if (
@@ -103,9 +103,8 @@ export async function useGms2(
     ctx,
     cache,
     toolchainOptions,
-    options.target,
     options.licenseFile,
-    options.projectPath,
+    options.target,
   );
 
   let label: string;
@@ -254,18 +253,20 @@ function getPackageAction(
         extraArgs: [],
       };
     }
-    case "android":
-      return {
-        action: "Package",
-        targetFile: outputPath ?? `${defaultBasePath}.aab`,
-        extraArgs: [],
-      };
     case "ios":
       return {
         action: "Package",
         targetFile: outputPath ?? `${defaultBasePath}.zip`,
         extraArgs: [],
       };
+    case "android": {
+      const apk = options.android.packageType === "apk";
+      return {
+        action: "Package",
+        targetFile: outputPath ?? `${defaultBasePath}${apk ? ".apk" : ".aab"}`,
+        extraArgs: [],
+      };
+    }
     default:
       throw new KnownError("Target not supported in GM-CLI yet.");
   }
@@ -275,9 +276,8 @@ async function createLocalSettings(
   ctx: Context,
   cache: Cache,
   toolchainOptions: Gms2ToolchainOptions,
-  target: Target,
   licenseFile: string,
-  projectPath: ProjectPath,
+  target: Target,
 ): Promise<string | undefined> {
   const localSettings: Record<string, string> = {};
   if (toolchainOptions.operagx.emscriptenSdk) {
@@ -288,25 +288,43 @@ async function createLocalSettings(
     localSettings["machine.Platform Settings.Windows.visual_studio_path"] =
       toolchainOptions.windows.visualStudioSdk;
   }
-
-  const needsUserDir = ["android", "ios"].includes(target);
-
-  if (needsUserDir) {
-    const projectDir = ctx.path.dirname(projectPath);
-    const projectLocalSettings = ctx.path.join(
-      projectDir,
-      "local_settings.json",
-    );
-    try {
-      const content = await ctx.fs.readFile(projectLocalSettings, "utf-8");
-      const parsed = JSON.parse(content) as Record<string, string>;
-      Object.assign(localSettings, parsed);
-    } catch {
-      // No project-level local_settings.json found
+  if (toolchainOptions.android.sdkPath) {
+    localSettings["machine.Platform Settings.Android.Paths.sdk_location"] =
+      toolchainOptions.android.sdkPath;
+  }
+  if (toolchainOptions.android.ndkPath) {
+    localSettings["machine.Platform Settings.Android.Paths.ndk_location"] =
+      toolchainOptions.android.ndkPath;
+  }
+  if (toolchainOptions.android.jdkPath) {
+    localSettings["machine.Platform Settings.Android.Paths.jdk_location"] =
+      toolchainOptions.android.jdkPath;
+  }
+  if (toolchainOptions.android.keystoreFile) {
+    localSettings["machine.Platform Settings.Android.Keystore.filename"] =
+      toolchainOptions.android.keystoreFile;
+  }
+  if (toolchainOptions.android.keystoreAlias) {
+    localSettings["machine.Platform Settings.Android.Keystore.alias"] =
+      toolchainOptions.android.keystoreAlias;
+  }
+  const { keystorePassword, keystoreAliasPassword } = toolchainOptions.android;
+  if (keystorePassword || keystoreAliasPassword) {
+    const email = await readLicenseEmail(ctx, licenseFile);
+    if (keystorePassword) {
+      localSettings[
+        "machine.Platform Settings.Android.Keystore.keystore_password"
+      ] = encryptKeystorePassword(keystorePassword, email);
+    }
+    if (keystoreAliasPassword) {
+      localSettings[
+        "machine.Platform Settings.Android.Keystore.keystore_alias_password"
+      ] = encryptKeystorePassword(keystoreAliasPassword, email);
     }
   }
+  // add more options here...
 
-  if (Object.keys(localSettings).length === 0 && !needsUserDir) {
+  if (Object.keys(localSettings).length === 0 && target !== "ios") {
     return undefined;
   }
 
@@ -315,18 +333,63 @@ async function createLocalSettings(
     ctx.path.join(userDir, "local_settings.json"),
     JSON.stringify(localSettings, null, 2) + "\n",
   );
-
-  if (needsUserDir) {
-    const licenseDest = ctx.path.join(
-      userDir,
-      ctx.path.basename(ctx.path.dirname(licenseFile)),
-      "licence.plist",
-    );
-    await ctx.fs.mkdir(ctx.path.dirname(licenseDest), { recursive: true });
-    await ctx.fs.copyFile(licenseFile, licenseDest);
+  await ctx.fs.chmod(userDir, 0o700);
+  await ctx.fs.chmod(ctx.path.join(userDir, "local_settings.json"), 0o600);
+  if (target === "ios" || target === "android") {
+    await ctx.fs.copyFile(licenseFile, ctx.path.join(userDir, "licence.plist"));
+    await ctx.fs.chmod(ctx.path.join(userDir, "licence.plist"), 0o600);
   }
-
+  if (target === "ios") {
+    const devices = toolchainOptions.ios.devicesFile;
+    if (!devices)
+      throw new KnownError(
+        "Set gms2.ios.devicesFile to the worker devices.json",
+      );
+    await ctx.fs.copyFile(devices, ctx.path.join(userDir, "devices.json"));
+    await ctx.fs.chmod(ctx.path.join(userDir, "devices.json"), 0o600);
+  }
   return userDir;
+}
+
+// Igor keys the keystore password encryption on the license email.
+async function readLicenseEmail(
+  ctx: Context,
+  licenseFile: string,
+): Promise<string> {
+  const license = await ctx.fs.readFile(licenseFile, "utf-8");
+  const email = /<key>email<\/key>\s*<string>([^<]+)<\/string>/i.exec(
+    license,
+  )?.[1];
+  if (!email) {
+    throw new KnownError(`Found no email in the license file.`);
+  }
+  return email;
+}
+
+function encryptKeystorePassword(password: string, email: string): string {
+  const salt = Buffer.from(email, "utf-8").toString("hex").toUpperCase();
+  let encrypted = "";
+  for (let i = 0; i < password.length; i++) {
+    encrypted += String.fromCharCode(
+      password.charCodeAt(i) ^ salt.charCodeAt(i % salt.length),
+    );
+  }
+  return Buffer.from(encrypted, "utf-8").toString("base64");
+}
+
+// GMAssetCompiler ignores some project options unless the matching feature flag is on.
+const ASSET_COMPILER_FEATURE_FLAGS = ["strip_unused_assets"];
+
+/**
+ * Igor obfuscates the flag list before passing it as `/ffe=`: the comma
+ * separated list as UTF-8, every byte shifted by 10, then base64.
+ */
+function encodeFeatureFlags(flags: string[]): string {
+  const bytes = Buffer.from(flags.join(","), "utf-8");
+  for (const [i, byte] of bytes.entries()) {
+    bytes[i] = byte + 10;
+  }
+  return bytes.toString("base64");
 }
 
 export interface CommonIgorBuildArgs {
@@ -378,6 +441,8 @@ export function constructIgorBuildArgs(
     ...(commonArgs.verbose ? ["-v"] : []),
     "-projectool",
     commonArgs.projectToolPath,
+    "-ac",
+    `/ffe=${encodeFeatureFlags(ASSET_COMPILER_FEATURE_FLAGS)}`,
     "-jsonErrors",
     ...(commonArgs.userDir ? ["-uf", commonArgs.userDir] : []),
     ...(commonArgs.config ? ["-config", commonArgs.config] : []),
