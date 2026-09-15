@@ -97,7 +97,23 @@ export const gms2Schema = z
         packageType: z.enum(["zip", "appimage"]),
       })
       .partial(),
-    ios: z.object({ devicesFile: z.string() }).partial(),
+    ios: z
+      .object({
+        packageType: z.enum(["xcodeproject", "ipa"]),
+        configuration: z.enum(["Debug", "Release"]),
+        scheme: z.string().min(1),
+        developerDir: z.string(),
+        teamId: z.string().regex(/^[A-Z0-9]{10}$/),
+        signingIdentity: z.string().min(1),
+        provisioningProfile: z.string().min(1),
+        jobs: z.number().int().min(1).max(32),
+        exportOptionsPlist: z.string(),
+        simulatorId: z.uuid(),
+        podInstall: z.boolean(),
+        allowProvisioningUpdates: z.boolean(),
+      })
+      .strict()
+      .partial(),
     android: z
       .object({
         packageType: z.enum(["apk", "aab"]),

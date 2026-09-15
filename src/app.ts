@@ -24,8 +24,8 @@ import { loginCommand } from "./commands/login/command";
 import { packageCommand } from "./commands/package/command";
 import { gxgamesCommand } from "./commands/gxgames/command";
 import { KnownError } from "./error";
-import { getLatestVersion } from "./get-latest-version";
 import { manualCommand } from "./commands/manual/command";
+import { runtimeCommand } from "./commands/runtime/command";
 import { cacheCommand } from "./commands/cache/command";
 
 const routes = buildRouteMap({
@@ -39,6 +39,7 @@ const routes = buildRouteMap({
     login: loginCommand,
     gxgames: gxgamesCommand,
     cache: cacheCommand,
+    runtime: runtimeCommand,
   },
   docs: {
     brief: description,
@@ -49,8 +50,7 @@ export const app = buildApplication(routes, {
   name: "gm-cli",
   versionInfo: {
     currentVersion: version,
-    getLatestVersion,
-    upgradeCommand: "npm install -g @gamemaker/gm-cli",
+    // This fork is distributed as a pinned company artifact, not the npm latest tag.
   },
   documentation: {
     caseStyle: "convert-camel-to-kebab",
@@ -71,7 +71,7 @@ export const app = buildApplication(routes, {
             exc instanceof Error
               ? (exc.stack ?? exc.message)
               : JSON.stringify(exc, null, 2);
-          return `An unexpected error occurred. Please report it as a bug on https://github.com/YoYoGames/gm-cli/issues\nGM-CLI v${version} ${process.platform}/${process.arch}\n\n${detail}`;
+          return `An unexpected error occurred. Please report it as a bug on https://github.com/Checkbox-Entertainment-LTD/gm-cli/issues\nGM-CLI v${version} ${process.platform}/${process.arch}\n\n${detail}`;
         },
       };
     },

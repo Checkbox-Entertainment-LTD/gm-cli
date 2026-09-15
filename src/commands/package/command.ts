@@ -94,6 +94,29 @@ export const packageCommand = buildCommand({
         brief: "GameMaker project config to build with (default: 'Default')",
         optional: true,
       },
+      runtimeLock: {
+        kind: "parsed",
+        parse: String,
+        optional: true,
+        brief: "Verified custom release lock from gm-cli runtime resolve",
+      },
+      preflight: {
+        kind: "boolean",
+        optional: true,
+        brief: "Install and verify the selected runtime without compiling",
+      },
+      resultFile: {
+        kind: "parsed",
+        parse: String,
+        optional: true,
+        brief: "Write verified build outputs and runtime identity as JSON",
+      },
+      toolchainOptionsFile: {
+        kind: "parsed",
+        parse: String,
+        optional: true,
+        brief: "Read toolchain options from a protected JSON file",
+      },
       toolchainOptions: {
         kind: "parsed",
         parse: String,

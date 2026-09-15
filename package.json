@@ -5,10 +5,10 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YoYoGames/gm-cli"
+    "url": "https://github.com/Checkbox-Entertainment-LTD/gm-cli"
   },
   "type": "module",
-  "version": "2.3.0",
+  "version": "2.3.0-checkbox.1",
   "files": [
     "dist",
     "NOTICE"
@@ -17,11 +17,11 @@
     "gm-cli": "dist/cli.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "scripts": {
     "prebuild": "tsc -p tsconfig.json",
-    "build": "tsup --silent",
+    "build": "tsup --silent && node scripts/copy-native.mjs",
     "prepublishOnly": "pnpm run build",
     "lint:eslint": "eslint --max-warnings 0",
     "lint:prettier": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore",
@@ -30,7 +30,8 @@
     "fix:eslint": "eslint --fix --max-warnings 0",
     "fix:prettier": "prettier --write . --ignore-path .gitignore --ignore-path .prettierignore",
     "fix": "run-p fix:*",
-    "gen:ggbe-api": "node ./src/commands/gxgames/api/gen.ts"
+    "gen:ggbe-api": "node ./src/commands/gxgames/api/gen.ts",
+    "test": "node scripts/test-mobile.mjs && python3 -m unittest discover -s native -p \"test_*.py\" -q"
   },
   "devDependencies": {
     "@clack/prompts": "^1.1.0",

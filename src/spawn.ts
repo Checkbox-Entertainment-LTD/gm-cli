@@ -27,6 +27,8 @@ export function spawnProcess(
     onSignal,
     errorLabel,
     verbose = false,
+    cwd,
+    env: environment,
     parseStderr = (s: string) => ({ errorMessage: s, shouldThrow: false }),
   }: {
     cmd: string;
@@ -34,6 +36,8 @@ export function spawnProcess(
     onSignal?: () => void;
     errorLabel: string;
     verbose?: boolean;
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
     parseStderr?: (stderr: string) => {
       errorMessage: string;
       shouldThrow: boolean;
@@ -44,15 +48,17 @@ export function spawnProcess(
     log.message([cmd, ...args].join(" "));
   }
 
+  const baseEnv = environment ?? ctx.process.env;
   const env =
     ctx.process.platform === "darwin"
-      ? { ...ctx.process.env, COMPlus_ZapDisable: "1" }
-      : ctx.process.env;
+      ? { ...baseEnv, COMPlus_ZapDisable: "1" }
+      : baseEnv;
 
   return new Promise<void>((resolve, reject) => {
     const child = ctx.child_process.spawn(cmd, args, {
       stdio: ["inherit", "pipe", "pipe"],
       env,
+      cwd,
     });
 
     const logLines = (data: Buffer) => {
@@ -95,7 +101,7 @@ export function spawnProcess(
 
       if (shouldThrow) {
         reject(new KnownError(errorMessage));
-      } else if (code === 0 || code === null) {
+      } else if (code === 0) {
         resolve();
       } else {
         reject(

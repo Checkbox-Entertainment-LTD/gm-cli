@@ -29,7 +29,20 @@ export interface Gms2ToolchainOptions {
   linux: {
     packageType?: "zip" | "appimage";
   };
-  ios: { devicesFile?: string };
+  ios: {
+    packageType?: "xcodeproject" | "ipa";
+    configuration?: "Debug" | "Release";
+    scheme?: string;
+    developerDir?: string;
+    teamId?: string;
+    signingIdentity?: string;
+    provisioningProfile?: string;
+    jobs?: number;
+    exportOptionsPlist?: string;
+    simulatorId?: string;
+    podInstall?: boolean;
+    allowProvisioningUpdates?: boolean;
+  };
   android: {
     packageType?: "apk" | "aab";
     sdkPath?: string;
@@ -56,7 +69,7 @@ export function defaultGms2ToolchainOptions(): Gms2ToolchainOptions {
     linux: {
       packageType: "zip",
     },
-    ios: {},
+    ios: { packageType: "xcodeproject", podInstall: true },
     android: {
       packageType: "apk",
     },

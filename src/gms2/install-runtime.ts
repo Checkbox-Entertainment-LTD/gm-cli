@@ -237,7 +237,11 @@ export async function installRuntimeIfNeeded(
     ? await getInstalledRuntimeModules(ctx, runtimeLocation)
     : [];
 
-  if (runtimeLocation && installedModules.includes(target)) {
+  if (
+    runtimeLocation &&
+    installedModules.includes("base") &&
+    installedModules.includes(target)
+  ) {
     log.success("Runtime found");
     return runtimeLocation;
   }
@@ -265,7 +269,11 @@ export async function installRuntimeIfNeeded(
       runtimeUrl,
     });
 
-    const tempRuntimeLocation = await findRuntimeLocation(ctx, tempDir);
+    const tempRuntimeLocation = await findRuntimeLocation(
+      ctx,
+      tempDir,
+      completeVersion,
+    );
     if (!tempRuntimeLocation) {
       throw new Error(
         "Invariant broken: no runtime found in temp directory after installation",
@@ -304,7 +312,7 @@ export async function installRuntimeIfNeeded(
   }
   log.success("Runtime installed");
 
-  runtimeLocation = await findRuntimeLocation(ctx, runtimeDir);
+  runtimeLocation = await findRuntimeLocation(ctx, runtimeDir, version);
   if (!runtimeLocation) {
     throw new Error("Invariant broken: no runtime found after installation");
   }

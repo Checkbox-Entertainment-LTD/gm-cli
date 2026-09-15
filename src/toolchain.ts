@@ -48,6 +48,9 @@ export const gmrtVersionSchema = z
   .transform((s) => new Range(s));
 
 export function parseToolchainVersion(s: string): ToolchainVersion {
+  if (s.split("@").length > 2) {
+    throw new Error("Expected one toolchain version separator");
+  }
   const [rawType, rawVersion] = s.split("@", 2);
 
   const typeResult = toolchainTypeSchema.safeParse(rawType);
@@ -61,6 +64,19 @@ export function parseToolchainVersion(s: string): ToolchainVersion {
   }
 
   if (type === "GMS2") {
+    if (rawVersion.includes("-")) {
+      const custom = /^(\d+\.\d+\.\d+\.\d+)-c([1-9]\d*)$/.exec(rawVersion);
+      if (!custom?.[1]) {
+        throw new Error(
+          "Custom runtimes require an exact A.B.C.D-cN version with lowercase c",
+        );
+      }
+      return {
+        type,
+        version: gms2VersionSchema.parse(custom[1]),
+        customVersion: rawVersion,
+      };
+    }
     const versionResult = gms2VersionSchema.safeParse(rawVersion);
     if (!versionResult.success) {
       throw new Error(versionResult.error.issues[0]?.message);
@@ -126,6 +142,9 @@ export function toolchainVersionToString(toolchain: ToolchainVersion): string {
     return toolchain.type;
   }
   if (toolchain.type === "GMS2") {
+    if (toolchain.customVersion) {
+      return `GMS2@${toolchain.customVersion}`;
+    }
     const versionStr = toolchain.version
       .filter((v) => v !== undefined)
       .join(".");
@@ -148,6 +167,7 @@ export type ToolchainVersion =
   | {
       type: "GMS2";
       version?: Gms2VersionPartial;
+      customVersion?: string;
     }
   | {
       type: "GMRT";

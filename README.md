@@ -3,6 +3,10 @@
 
 ![Recording of the gm-cli run command](https://raw.githubusercontent.com/YoYoGames/gm-cli/refs/heads/main/recordings/run.gif)
 
+## Mobile support in this fork
+
+See [iOS builds](IOS.md) for verified Xcode project output, native compilation, simulator launch, signed IPA export and machine-readable results. The supported Node baseline follows upstream (Node 24); workers use the version in `.node-version`.
+
 # Usage
 > IMPORTANT: You must first install [nodeJS](https://nodejs.org/en) which comes with the tools `npm` and `npx`. 
 
@@ -111,3 +115,5 @@ GameMaker CLI will have support to manage more targets.
 
 ### Editor integration
 `gm-cli` will support opening projects in the IDE (or your preferred editor) and likely also help you download the IDE itself.
+
+Exact custom mobile runtimes and CI verification: [CUSTOM-RUNTIMES.md](CUSTOM-RUNTIMES.md).

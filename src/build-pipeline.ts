@@ -54,6 +54,10 @@ export interface CommonCliBuildFlags {
   // See gms2/options.ts or gmrt/options.ts,
   // this is the main place for options that are seldom set manually or toolchain/target specific.
   toolchainOptions?: string;
+  toolchainOptionsFile?: string;
+  resultFile?: string;
+  runtimeLock?: string;
+  preflight?: boolean;
 }
 
 export async function runBuildPipeline(
@@ -74,6 +78,13 @@ export async function runBuildPipeline(
 
   const cwd = ctx.process.cwd();
   const target = flags.target ?? targetForPlatform(ctx.process.platform);
+  if (
+    target === "ios" &&
+    ctx.process.platform !== "darwin" &&
+    !flags.preflight
+  ) {
+    throw new KnownError("iOS builds require a Mac with Xcode installed");
+  }
   const projectPath = project ?? (await findProjectFile(ctx, cwd));
   if (projectPath === undefined) {
     throw new KnownError("No .yyp project file found in the current directory");
@@ -104,8 +115,19 @@ export async function runBuildPipeline(
 
   const toolchain = flags.toolchain ?? gmOptions?.toolchain ?? { type: "GMS2" };
 
-  const toolchainOptionsParsed = flags.toolchainOptions
-    ? parseToolchainOptions(flags.toolchainOptions, toolchain.type)
+  if (flags.toolchainOptions && flags.toolchainOptionsFile) {
+    throw new KnownError(
+      "Use only one of --toolchain-options or --toolchain-options-file",
+    );
+  }
+  const rawOptions = flags.toolchainOptionsFile
+    ? await ctx.fs.readFile(
+        ctx.path.resolve(flags.toolchainOptionsFile),
+        "utf-8",
+      )
+    : flags.toolchainOptions;
+  const toolchainOptionsParsed = rawOptions
+    ? parseToolchainOptions(rawOptions, toolchain.type)
     : {};
 
   const gmToolLog = ctx.makeTaskLogger("Downloading tools");
@@ -213,6 +235,10 @@ export async function runBuildPipeline(
       verbose,
       licenseFile,
       version: toolchain?.type === "GMS2" ? toolchain.version : undefined,
+      resultFile: flags.resultFile,
+      runtimeLock: flags.runtimeLock,
+      customVersion: toolchain.customVersion,
+      preflight: flags.preflight,
       toolchainOptions: toolchainOptionsParsed.GMS2 ?? gmOptions?.gms2 ?? {},
       config: flags.config,
     },
@@ -306,7 +332,7 @@ function parseToolchainOptions(
   try {
     json = JSON.parse(raw);
   } catch {
-    throw new KnownError(`--toolchain-options is not valid JSON: ${raw}`);
+    throw new KnownError("Toolchain options are not valid JSON");
   }
 
   // FIXME: when encountering errors we should print info about where the full JSON schema can be found.

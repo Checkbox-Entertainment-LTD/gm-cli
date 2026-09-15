@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+import { createHash } from "node:crypto";
+import {
+  assemblySchema,
+  nativeRuntimeCommand,
+  type Assembly,
+} from "./custom-runtime";
+import { preflightIos, finishIos } from "./ios";
 import type { Cache } from "~/cache";
 import type { Context } from "~/context";
 import { KnownError } from "~/error";
@@ -46,6 +53,10 @@ export async function useGms2(
     licenseFile: string;
     verbose: boolean;
     version?: Gms2VersionPartial;
+    resultFile?: string;
+    runtimeLock?: string;
+    customVersion?: string;
+    preflight?: boolean;
     toolchainOptions: Partial<Gms2ToolchainOptions>;
     config?: string;
   },
@@ -61,8 +72,8 @@ export async function useGms2(
     windows: options.toolchainOptions.windows ?? defaults.windows,
     mac: options.toolchainOptions.mac ?? defaults.mac,
     linux: options.toolchainOptions.linux ?? defaults.linux,
-    ios: options.toolchainOptions.ios ?? defaults.ios,
-    android: options.toolchainOptions.android ?? defaults.android,
+    ios: { ...defaults.ios, ...options.toolchainOptions.ios },
+    android: { ...defaults.android, ...options.toolchainOptions.android },
   };
 
   if (
@@ -85,8 +96,49 @@ export async function useGms2(
     );
   }
 
+  if (options.target === "ios" && !options.preflight) {
+    await preflightIos(ctx, command, toolchainOptions.ios);
+  }
+  if (options.resultFile) {
+    const resultPath = ctx.path.resolve(options.resultFile);
+    if (
+      await ctx.fs.stat(resultPath).then(
+        () => true,
+        (e: unknown) => {
+          if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+            return false;
+          }
+          throw e;
+        },
+      )
+    ) {
+      throw new KnownError("Result file already exists; choose a fresh path");
+    }
+  }
+  if (
+    options.customVersion &&
+    (options.runtime !== "native" ||
+      !["ios", "android"].includes(options.target))
+  ) {
+    throw new KnownError("Custom runtimes support mobile YYC builds only");
+  }
+  if (options.runtimeLock) {
+    const selected = options.customVersion ?? options.version?.join(".");
+    if (!selected) {
+      throw new KnownError("A runtime lock requires an exact selected version");
+    }
+    await nativeRuntimeCommand(ctx, [
+      "verify-lock",
+      "--lock",
+      ctx.path.resolve(options.runtimeLock),
+      "--version",
+      selected,
+      "--platform",
+      options.target,
+    ]);
+  }
   const runtimeLog = ctx.makeTaskLogger("Installing runtime");
-  const runtimeLocation = await installRuntimeIfNeeded(ctx, runtimeLog, {
+  let runtimeLocation = await installRuntimeIfNeeded(ctx, runtimeLog, {
     licenseFile: options.licenseFile,
     igorPath: tools.igorPath,
     cache,
@@ -94,10 +146,83 @@ export async function useGms2(
     target: options.target,
   });
 
-  const buildCacheDir = await cache.getSubDirPath(
+  const buildRoot = await cache.getSubDirPath(
     ctx,
     `build-gms2-${options.target}-${runtime}`,
   );
+  const buildCacheDir =
+    ["ios", "android"].includes(options.target) || !!options.customVersion
+      ? await ctx.fs.mkdtemp(ctx.path.join(buildRoot, "invocation-"))
+      : buildRoot;
+
+  let assembly: Assembly | undefined;
+  if (options.customVersion) {
+    let lock = options.runtimeLock;
+    if (!lock) {
+      const release = ctx.path.join(buildCacheDir, "release");
+      await nativeRuntimeCommand(ctx, [
+        "resolve",
+        "--version",
+        options.customVersion,
+        "--platforms",
+        options.target,
+        "--output",
+        release,
+      ]);
+      lock = ctx.path.join(release, "lock.json");
+    }
+    const destination = ctx.path.join(
+      buildCacheDir,
+      "runtime-" + options.customVersion,
+    );
+    assembly = assemblySchema.parse(
+      await nativeRuntimeCommand(ctx, [
+        "assemble",
+        "--lock",
+        ctx.path.resolve(lock),
+        "--version",
+        options.customVersion,
+        "--platform",
+        options.target,
+        "--base-runtime",
+        runtimeLocation,
+        "--output",
+        destination,
+      ]),
+    );
+    runtimeLocation = destination;
+  }
+  const host =
+    ctx.process.platform === "darwin"
+      ? "osx"
+      : ctx.process.platform === "win32"
+        ? "windows"
+        : "linux";
+  const runtimeIgor = !["ios", "android"].includes(options.target)
+    ? tools.igorPath
+    : ctx.path.join(
+        runtimeLocation,
+        "bin",
+        "igor",
+        host,
+        ctx.process.arch,
+        ctx.process.platform === "win32" ? "Igor.exe" : "Igor",
+      );
+  await ctx.fs.access(runtimeIgor);
+  const toolHashes = {
+    igor: createHash("sha256")
+      .update(await ctx.fs.readFile(runtimeIgor))
+      .digest("hex"),
+    projectTool: createHash("sha256")
+      .update(await ctx.fs.readFile(tools.projectToolPath))
+      .digest("hex"),
+  };
+  if (options.preflight) {
+    runtimeLog.success(
+      `Runtime verified: ${options.customVersion ?? ctx.path.basename(runtimeLocation)}`,
+    );
+    return;
+  }
 
   const userDir = await createLocalSettings(
     ctx,
@@ -105,14 +230,20 @@ export async function useGms2(
     toolchainOptions,
     options.licenseFile,
     options.target,
+    options.target === "ios" ? buildCacheDir : undefined,
   );
 
   let label: string;
   let igorAction: string;
   let extraArgs: string[] = [];
   let successMessage: string;
+  let packagePath: string | undefined;
 
-  if (command.type === "compile") {
+  if (options.target === "ios") {
+    label = "Generating iOS Xcode project";
+    igorAction = "Package";
+    successMessage = "iOS build finished";
+  } else if (command.type === "compile") {
     label = `Compiling for ${options.target}`;
     igorAction = "Compile";
     successMessage = "Compilation finished";
@@ -140,9 +271,25 @@ export async function useGms2(
     );
     igorAction = action;
     extraArgs = ["-tf", targetFile, ...packageArgs];
+    packagePath = targetFile;
     successMessage = `Package created: ${targetFile}`;
   }
 
+  if (
+    options.target === "android" &&
+    packagePath &&
+    (await ctx.fs.stat(packagePath).then(
+      () => true,
+      () => false,
+    ))
+  ) {
+    if (userDir) {
+      await ctx.fs.rm(userDir, { recursive: true, force: true });
+    }
+    throw new KnownError(
+      "Android package output already exists; choose a fresh file",
+    );
+  }
   const actionLog = ctx.makeTaskLogger(label, {
     // To try avoid the scrollback buffer looking really strange when outputting a lot of content, we don't
     // collapse the main output when running/compiling a project.
@@ -151,7 +298,7 @@ export async function useGms2(
 
   try {
     await spawnIgor(ctx, actionLog, {
-      igorPath: tools.igorPath,
+      igorPath: runtimeIgor,
       verbose: options.verbose,
       args: constructIgorBuildArgs(
         ctx,
@@ -177,12 +324,66 @@ export async function useGms2(
         stopProcesses(ctx);
       },
     });
+
+    let outputs: unknown;
+    if (options.target === "ios") {
+      const result = await finishIos(
+        ctx,
+        actionLog,
+        command,
+        toolchainOptions.ios,
+        options.projectPath,
+        buildCacheDir,
+        assembly ? ctx.path.join(runtimeLocation, "assembly.json") : undefined,
+      );
+      outputs = result;
+      successMessage = result.ipa
+        ? `IPA created: ${result.ipa}`
+        : command.type === "package"
+          ? `Xcode project created: ${result.xcodeProject}`
+          : command.type === "run"
+            ? `App launched on simulator ${result.simulatorId ?? "unknown"}`
+            : `iOS compilation finished: ${result.xcodeProject}`;
+    } else if (packagePath) {
+      const stat = await ctx.fs.stat(packagePath);
+      if (!stat.isFile() || stat.size === 0) {
+        throw new KnownError("Igor did not produce the requested package");
+      }
+      outputs = { package: packagePath };
+    }
+    if (options.resultFile) {
+      await ctx.fs.writeFile(
+        ctx.path.resolve(options.resultFile),
+        JSON.stringify(
+          {
+            schema: 1,
+            assembly,
+            tools: toolHashes,
+            gameCommit: ctx.process.env["GM_GAME_COMMIT"],
+            target: options.target,
+            runtime: ctx.path
+              .basename(runtimeLocation)
+              .replace(/^runtime-/, ""),
+            compiler: runtime,
+            runtimeDirectory: runtimeLocation,
+            buildDirectory: buildCacheDir,
+            outputs,
+          },
+          null,
+          2,
+        ) + "\n",
+        { flag: "wx" },
+      );
+    }
+    actionLog.success(successMessage);
   } catch (e) {
     actionLog.error("Failed");
     throw new KnownError(e);
+  } finally {
+    if (userDir) {
+      await ctx.fs.rm(userDir, { recursive: true, force: true });
+    }
   }
-
-  actionLog.success(successMessage);
 }
 
 function getPackageAction(
@@ -254,11 +455,7 @@ function getPackageAction(
       };
     }
     case "ios":
-      return {
-        action: "Package",
-        targetFile: outputPath ?? `${defaultBasePath}.zip`,
-        extraArgs: [],
-      };
+      throw new KnownError("iOS packaging requires the local Xcode pipeline");
     case "android": {
       const apk = options.android.packageType === "apk";
       return {
@@ -278,6 +475,7 @@ async function createLocalSettings(
   toolchainOptions: Gms2ToolchainOptions,
   licenseFile: string,
   target: Target,
+  isolatedDir?: string,
 ): Promise<string | undefined> {
   const localSettings: Record<string, string> = {};
   if (toolchainOptions.operagx.emscriptenSdk) {
@@ -328,7 +526,18 @@ async function createLocalSettings(
     return undefined;
   }
 
-  const userDir = await cache.getSubDirPath(ctx, "gms2-local-settings");
+  if (target === "ios") {
+    // Generate locally, without Igor opening Xcode or attempting an SSH build.
+    localSettings["machine.Platform Settings.iOS.suppress_build"] = "True";
+    if (toolchainOptions.ios.teamId) {
+      localSettings["machine.Platform Settings.iOS.default_team_id"] =
+        toolchainOptions.ios.teamId;
+    }
+  }
+  const settingsRoot =
+    isolatedDir ?? (await cache.getSubDirPath(ctx, "gms2-local-settings"));
+  const userDir = await ctx.fs.mkdtemp(ctx.path.join(settingsRoot, "user-"));
+  await ctx.fs.chmod(userDir, 0o700);
   await ctx.fs.writeFile(
     ctx.path.join(userDir, "local_settings.json"),
     JSON.stringify(localSettings, null, 2) + "\n",
@@ -338,15 +547,6 @@ async function createLocalSettings(
   if (target === "ios" || target === "android") {
     await ctx.fs.copyFile(licenseFile, ctx.path.join(userDir, "licence.plist"));
     await ctx.fs.chmod(ctx.path.join(userDir, "licence.plist"), 0o600);
-  }
-  if (target === "ios") {
-    const devices = toolchainOptions.ios.devicesFile;
-    if (!devices)
-      throw new KnownError(
-        "Set gms2.ios.devicesFile to the worker devices.json",
-      );
-    await ctx.fs.copyFile(devices, ctx.path.join(userDir, "devices.json"));
-    await ctx.fs.chmod(ctx.path.join(userDir, "devices.json"), 0o600);
   }
   return userDir;
 }
@@ -443,7 +643,9 @@ export function constructIgorBuildArgs(
     commonArgs.projectToolPath,
     "-ac",
     `/ffe=${encodeFeatureFlags(ASSET_COMPILER_FEATURE_FLAGS)}`,
-    "-jsonErrors",
+    // Bundled mobile Igor versions predate this option; an unknown -j is
+    // parsed as a job count and crashes before generating the project.
+    ...(["ios", "android"].includes(commonArgs.target) ? [] : ["-jsonErrors"]),
     ...(commonArgs.userDir ? ["-uf", commonArgs.userDir] : []),
     ...(commonArgs.config ? ["-config", commonArgs.config] : []),
     ...extraArgs,
