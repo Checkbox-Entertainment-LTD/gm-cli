@@ -54,10 +54,13 @@ The iOS app/dSYM UUID is `966589B4-3DAB-3874-A2ED-2AC20F8E95A3` (arm64). Apple a
 
 The Android AAB contains only ARM64 and x86_64. Both game libraries have full matching debug information; four vendor libraries retain their available symbol/unwind data. Android delivery stopped because Sentry CLI's `--require-all` incorrectly rejected already stored vendor symbols. IOM commit `da9674c22` removes that CLI switch while preserving independent API verification of every expected debug ID and feature. [Symbol validation build 2](https://build.frozenara.com/job/IOM_Symbol_Validation/2/) passed for all nine iOS and six Android identifiers; its receipts match the exact build-3 manifests. Eleven Python tests passed.
 
-Build 3 remains FAILURE because of the delivery-stage errors. No Play upload or App Store review submission occurred. Automatic approval review blocked prepared store retries because the original acceptance instructions excluded them; explicit user approval is pending. The immutable native runner release and published CLI artifact were unchanged.
+Build 3 remains FAILURE because of the delivery-stage errors. No Play upload or App Store review submission occurred in that original build. Automatic approval review initially blocked the prepared retries because the original acceptance instructions excluded them; the user subsequently reaffirmed the full release, authorizing the recoveries below. The immutable native runner release and published CLI artifact were unchanged.
 
 ## Remaining acceptance
 
 - Install TestFlight 2.2.23 (103) and exercise save/load, restart and background/resume on a physical device.
 - Install the custom Android package and exercise the equivalent device behaviors.
-- Resolve approval for the prepared store delivery retries; package creation, TestFlight distribution and symbol verification are independently complete.
+
+## Authorized delivery recovery
+
+On 2026-09-16 the user explicitly reaffirmed the full-release request. [Android recovery 1](https://build.frozenara.com/job/IOM_Android_Recovery/1/) successfully uploaded and committed the exact preserved AAB to Play internal testing at 08:15 UTC, with Sentry symbols and release provenance verified. [iOS recovery 1](https://build.frozenara.com/job/IOM_iOS_Recovery/1/) selected the already uploaded 2.2.23 (103) build and submitted it for App Store review at 08:19:54 UTC. Independent API read-back confirmed `WAITING_FOR_REVIEW` and `MANUAL` release. Neither binary was rebuilt. Apple approval and physical-device behavior remain unverified.
