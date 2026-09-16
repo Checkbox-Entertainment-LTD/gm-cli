@@ -35,6 +35,10 @@ export default defineConfig(
   },
   { plugins: {} },
   {
+    files: ["tests/*.ts"],
+    rules: { "@typescript-eslint/no-floating-promises": "off" },
+  },
+  {
     files: ["src/**/*.ts"],
     plugins: { "@tony.ganchev": header },
     rules: {
@@ -47,7 +51,7 @@ export default defineConfig(
   {
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        projectService: { allowDefaultProject: ["tests/*.ts"] },
         tsconfigRootDir: import.meta.dirname,
       },
     },

@@ -78,8 +78,9 @@ test("reject unsafe framework archive destinations", () => {
     "a\\b",
     "C:/escape",
     "\0x",
-  ])
+  ]) {
     assert.equal(safeArchivePath(name), false, name);
+  }
   assert.equal(safeArchivePath("Name.xcframework/ios-arm64/Name"), true);
 });
 async function frameworkFixture(
@@ -189,7 +190,9 @@ test("iOS configuration exposes native export, simulator and Xcode options", () 
   );
 });
 test("reject non-Mac iOS builds before invoking tools", async () => {
-  if (process.platform === "darwin") return;
+  if (process.platform === "darwin") {
+    return;
+  }
   await assert.rejects(
     preflightIos(ctx, { type: "package" }, {}),
     /require a Mac/,

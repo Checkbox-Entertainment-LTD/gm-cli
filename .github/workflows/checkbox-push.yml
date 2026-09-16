@@ -1,0 +1,19 @@
+name: Checkbox push builds
+on:
+  push:
+    branches: ["**"]
+permissions:
+  contents: read
+jobs:
+  dispatch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Queue every pushed commit
+        env:
+          JENKINS_CI_URL: ${{ secrets.JENKINS_CI_URL }}
+          JENKINS_BUILD_TOKEN: ${{ secrets.JENKINS_BUILD_TOKEN }}
+          JENKINS_CI_JOB: GM_CLI
+        run: python3 ci/dispatch_push.py
