@@ -37,8 +37,27 @@ App Store Connect accepted the upload at `2026-09-15T22:20:23Z`. Apple processin
 
 The coordinator preflights on Linux in `.gm-preflight-2`; the Mac builds in `.gm-ios-2`. The CLI disables shared caching when an explicit cache directory is supplied, so each worker downloads the common and iOS official modules. Their host tool modules differ. Both assemble the same verified c1 release; the second official-base download is not a stock fallback. The current pipeline does not reuse official module downloads across these two stages.
 
+## Follow-up: 2.2.23 on both platforms
+
+The earlier build-2 processing poll was stopped after more than two hours without the uploaded build appearing, freeing the job for the user's new Discord-triggered [build 3](https://build.frozenara.com/job/IOM_Deploy/job/ci%252Frunner-releases/3/). Build 2 ended ABORTED after artifact archival; its Apple-side outcome was not confirmed.
+
+Build 3 used game commit `c85e8150cc78338d051374f855d08ab19cf27e88`, including all tagged 2.2.22 game changes, with marketing version 2.2.23 and the same pinned CLI and c1 runtime. Both platform packages passed native runtime/signing verification and were archived with their symbols and provenance.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| iOS IPA, build 103 | `27380effce36fe33dddf9031039d1f96e7dbc7563bd38f12ffdc19db128c9a64` |
+| iOS dSYM ZIP | `28486fb79411e332db45c34556de995c33ad03e64d5bdd948aa9694a4683d8ff` |
+| Android AAB | `0875a93b09d9835581d77751fd0dd4aeb07b3b4c321f65c5745fe3f7f7fec690` |
+| Android native symbols ZIP | `2f4ede44c17da85c5813f88b77ebda551e41518de37733b3bc02095f01412aab` |
+
+The iOS app/dSYM UUID is `966589B4-3DAB-3874-A2ED-2AC20F8E95A3` (arm64). Apple accepted build 103 at 00:33:19 UTC, finished processing at 00:35:53, and Fastlane confirmed external TestFlight distribution at 00:36:00. The selected App Store submission then failed on mutually exclusive Fastlane `ipa` and `build_number` arguments. IOM commit `0ea1adf29` fixes both delivery paths and supports exact already-uploaded-build recovery; six regression tests passed.
+
+The Android AAB contains only ARM64 and x86_64. Both game libraries have full matching debug information; four vendor libraries retain their available symbol/unwind data. Android delivery stopped because Sentry CLI's `--require-all` incorrectly rejected already stored vendor symbols. IOM commit `da9674c22` removes that CLI switch while preserving independent API verification of every expected debug ID and feature. [Symbol validation build 2](https://build.frozenara.com/job/IOM_Symbol_Validation/2/) passed for all nine iOS and six Android identifiers; its receipts match the exact build-3 manifests. Eleven Python tests passed.
+
+Build 3 remains FAILURE because of the delivery-stage errors. No Play upload or App Store review submission occurred. Automatic approval review blocked prepared store retries because the original acceptance instructions excluded them; explicit user approval is pending. The immutable native runner release and published CLI artifact were unchanged.
+
 ## Remaining acceptance
 
-- Confirm Apple processing, TestFlight distribution and final Jenkins result.
-- Install build 102 and exercise save/load, restart and background/resume on a physical device.
-- Run Android through Discord on the same integration branch with Play upload disabled; verify the signed AAB, c1 provenance and ARM64/x86_64 coverage.
+- Install TestFlight 2.2.23 (103) and exercise save/load, restart and background/resume on a physical device.
+- Install the custom Android package and exercise the equivalent device behaviors.
+- Resolve approval for the prepared store delivery retries; package creation, TestFlight distribution and symbol verification are independently complete.
