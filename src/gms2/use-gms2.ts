@@ -297,6 +297,20 @@ export async function useGms2(
   });
 
   try {
+    let buildProject = options.projectPath;
+    let runtimeIdentity: unknown;
+    if (options.customVersion) {
+      runtimeIdentity = await nativeRuntimeCommand(ctx, [
+        "prepare-identity",
+        "--project",
+        options.projectPath,
+        "--output",
+        ctx.path.join(buildCacheDir, "project-source"),
+        "--version",
+        options.customVersion,
+      ]);
+      buildProject = (runtimeIdentity as { project: ProjectPath }).project;
+    }
     await spawnIgor(ctx, actionLog, {
       igorPath: runtimeIgor,
       verbose: options.verbose,
@@ -309,7 +323,7 @@ export async function useGms2(
           runtimeDir: runtimeLocation,
           target: options.target,
           cacheDir: buildCacheDir,
-          projectPath: options.projectPath,
+          projectPath: buildProject,
           projectToolPath: tools.projectToolPath,
           verbose: options.verbose,
           runtime,
@@ -358,6 +372,7 @@ export async function useGms2(
           {
             schema: 1,
             assembly,
+            runtimeIdentity,
             tools: toolHashes,
             gameCommit: ctx.process.env["GM_GAME_COMMIT"],
             target: options.target,

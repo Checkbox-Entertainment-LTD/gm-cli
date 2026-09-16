@@ -371,6 +371,7 @@ def verify_android_distribution(result_path, aab, keystore, alias, output):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__); commands = parser.add_subparsers(dest='action', required=True)
+    identity_cmd = commands.add_parser('prepare-identity'); identity_cmd.add_argument('--project', type=Path, required=True); identity_cmd.add_argument('--output', type=Path, required=True); identity_cmd.add_argument('--version', required=True)
     resolve_cmd = commands.add_parser('resolve'); resolve_cmd.add_argument('--version', required=True); resolve_cmd.add_argument('--platforms', required=True); resolve_cmd.add_argument('--output', type=Path, required=True)
     assemble_cmd = commands.add_parser('assemble'); assemble_cmd.add_argument('--lock', type=Path, required=True); assemble_cmd.add_argument('--version', required=True); assemble_cmd.add_argument('--platform', choices=['ios','android'], required=True); assemble_cmd.add_argument('--base-runtime', type=Path, required=True); assemble_cmd.add_argument('--output', type=Path, required=True)
     verify_cmd = commands.add_parser('verify-lock'); verify_cmd.add_argument('--lock', type=Path, required=True); verify_cmd.add_argument('--version', required=True); verify_cmd.add_argument('--platform', choices=['ios','android'], required=True)
@@ -378,7 +379,10 @@ def main():
     verify_ios = commands.add_parser('verify-ios'); verify_ios.add_argument('--result', type=Path, required=True); verify_ios.add_argument('--derived-data', type=Path, required=True); verify_ios.add_argument('--ipa', type=Path, required=True); verify_ios.add_argument('--symbols', type=Path, required=True); verify_ios.add_argument('--output', type=Path, required=True)
     verify_android = commands.add_parser('verify-android'); verify_android.add_argument('--result', type=Path, required=True); verify_android.add_argument('--aab', type=Path, required=True); verify_android.add_argument('--keystore', type=Path, required=True); verify_android.add_argument('--alias', required=True); verify_android.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
-    if args.action == 'resolve': result = resolve(args.version, args.platforms.split(','), args.output)
+    if args.action == 'prepare-identity':
+        from runtime_identity import prepare
+        result = prepare(args.project, args.output, args.version)
+    elif args.action == 'resolve': result = resolve(args.version, args.platforms.split(','), args.output)
     elif args.action == 'assemble': result = assemble(args.lock, args.version, args.platform, args.base_runtime, args.output)
     elif args.action == 'verify-lock': result = verified_lock(args.lock, args.version, args.platform)[0]
     elif args.action == 'verify-ios': result = verify_ios_distribution(args.result, args.derived_data, args.ipa, args.symbols, args.output)
