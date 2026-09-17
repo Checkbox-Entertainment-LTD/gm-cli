@@ -131,7 +131,11 @@ function execIgor(
               return;
             }
           }
-          reject(error as Error);
+          reject(
+            error instanceof Error
+              ? error
+              : new Error("Igor invocation failed", { cause: error }),
+          );
         } else {
           resolve(stdout);
         }

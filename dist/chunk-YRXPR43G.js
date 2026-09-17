@@ -1,2 +1,0 @@
-import {createRequire as __createRequire} from 'module';var require=__createRequire(import.meta.url);
-import{g as t}from"./chunk-AE6O5N6J.js";var r=t.object({content:t.string().optional(),url:t.string().optional()});async function s(e,o,a){let n=await e.fetch("https://gx.mcp.opr.gg/ask",{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify({query:o,language:a})});return r.parse(await n.json())}export{s as a};

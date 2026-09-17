@@ -67,8 +67,7 @@ export default async function (
           (s) =>
             s.trim().toUpperCase() as GameDevUpdateGameRequestPlatformsEnum,
         )
-        .filter(Boolean) ??
-      (game.platforms as GameDevUpdateGameRequestPlatformsEnum[]),
+        .filter(Boolean) ?? game.platforms,
   };
   const updateRes = await api.updateGame(link.gameId, updateData);
   if (!updateRes.success) {

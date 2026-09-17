@@ -28,8 +28,7 @@ import type { Gms2ToolchainOptions } from "./options";
 
 type IosOptions = Gms2ToolchainOptions["ios"];
 export type IosCommand =
-  | { type: "compile" | "run" }
-  | { type: "package"; outputPath?: string };
+  { type: "compile" | "run" } | { type: "package"; outputPath?: string };
 
 export interface IosOutput {
   projectDirectory: string;
