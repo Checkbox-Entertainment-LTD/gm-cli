@@ -45,6 +45,7 @@ python3 ci/release_cli.py stamp
 npm ci
 npm test
 npm run build
+python3 ci/check_packaged_cli.py
 npm run lint
 '''
                 }

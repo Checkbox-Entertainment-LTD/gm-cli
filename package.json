@@ -8,7 +8,7 @@
     "url": "https://github.com/Checkbox-Entertainment-LTD/gm-cli"
   },
   "type": "module",
-  "version": "2.3.0-checkbox.3",
+  "version": "2.3.0-checkbox.4",
   "files": [
     "dist",
     "NOTICE"

@@ -14,6 +14,7 @@ The game does not select a CLI version. At build start the infrastructure resolv
 - `.github/workflows/checkbox-push.yml`: push event -> one job-scoped Jenkins POST per new commit. Any branch containing this workflow works; no branch naming policy.
 - `ci/commit_policy.py`: first-parent version comparison and Git-history push enumeration, including combined source+bump commits and multi-commit pushes.
 - `ci/release_cli.py`: synchronize package metadata, create checksummed release metadata and publish/resume immutable assets.
+- `ci/check_packaged_cli.py`: execute the packaged CLI twice and verify that its installed file inventory stays unchanged. This runs after compilation and before publication. Python helpers run with bytecode writes disabled so they cannot add cache files to the verified package.
 - `ci/cli_distribution.py`: independent Python bootstrap, highest successful release selection, private downloads, safe extraction, file verification, automatic Node installation and locks/atomic cache installation. Its game-side copy is the stable launcher dependency; keep both copies synchronized when changing the bootstrap itself.
 - `.node-version`: required Node for this CLI. CI provisions it automatically from official archives; release metadata records the official archive checksums for the game workers.
 

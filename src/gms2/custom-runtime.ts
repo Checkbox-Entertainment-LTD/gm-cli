@@ -29,7 +29,7 @@ export async function nativeRuntimeCommand(ctx: Context, args: string[]) {
   try {
     const { stdout } = await promisify(ctx.child_process.execFile)(
       "python3",
-      [helper, ...args],
+      ["-B", helper, ...args],
       {
         env: ctx.process.env,
         maxBuffer: 2 * 1024 * 1024,
